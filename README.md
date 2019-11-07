@@ -1,6 +1,6 @@
 # Concrete-Regression-and-Wine-Classification-Tasks
 
-### CS5062: Machine Learning course
+### CS5062: Machine Learning course (University of Aderdeen)
 
 #### Assignment I, consisting of two parts:
 1. Linear Regression analysis on the [Concrete Compressive Strength](https://archive.ics.uci.edu/ml/datasets/concrete+compressive+strength) dataset.
