@@ -15,31 +15,38 @@ from sklearn.preprocessing import label_binarize
 
 
 class DTClassifier(object):
-    """Brief class description
-    
-    Some more extensive description
+    """
+    The decision tree classifier with customizable hyperparameters as attributes.
     
     Attributes
     ----------
-    attr1 : string
-        Purpose of attr1.
-    attr2 : float
-        Purpose of attr2.
+    criterion : string (['entropy', 'gini']) 
+        The criterion for calculating the Information Gain the defines the tree splits.
+    min_samples_per_split : int
+        The minimum amount of nodes for each tree layer
+    max_depth : int
+        Pruning the tree by limiting the maximum depth
+    y_col : string
+        the name of the prediction column
     
     """
     
     def __init__(self, criterion='entropy', min_samples_per_split=2, max_depth=5,
                  cv_k=10, y_col='Y_WC'):
-        """Example of docstring on the __init__ method.
+        """Parameterized constructor for initializing the decision tree object.
         
         Parameters
         ----------
-        param1 : str
-            Description of `param1`.
-        param2 : float
-            Description of `param2`.
-        param3 : int, optional
-            Description of `param3`, defaults to 0.
+        criterion : string (['entropy', 'gini']) 
+            The criterion for calculating the Information Gain the defines the tree splits.
+        min_samples_per_split : int
+            The minimum amount of nodes for each tree layer
+        max_depth : int
+            Pruning the tree by limiting the maximum depth
+        cv_k : int
+            The number of splits for Cross Validation
+        y_col : string
+            the name of the prediction column
         
         """
         self._criterion = criterion
@@ -49,12 +56,30 @@ class DTClassifier(object):
         self._y_col = y_col
     
     def check_purity(self, labels):
+        '''
+        Checks whether only one class is present in the list of samples.
+    
+        Args:
+            labels(pd.Series): the annotations for the current tree split
+            
+        Returns:
+            True, False
+        '''
         unique_labels = labels.unique()
         if len(unique_labels) == 1:
             return True
         return False
     
     def infer_majority(self, labels):
+        '''
+        Makes a new prediction based on the majority class in the tree split.
+    
+        Args:
+            labels(pd.Series): the annotations for the current tree split
+            
+        Returns:
+            unique_labels(pd.Series): the predicted label classes (with the highest amount of samples)
+        '''
         unique_labels = labels.unique()
         unique_values = []
         for i in range(len(unique_labels)):
@@ -62,6 +87,16 @@ class DTClassifier(object):
         return unique_labels[np.argmax(unique_values)]
     
     def get_tree_splits(self, attributes):
+        '''
+        Creates a dictionary of all possible splits in each data point over each attribute.
+        This is done by sorting the values and fitting a line between each two pairs of data points.
+    
+        Args:
+            attributes(pd.DataFrame): the input features from the dataset
+            
+        Returns:
+            potential_splits(dict): a dictionary containing all the possible splits
+        '''
         potential_splits = {}
         for col_idx in range(attributes.shape[1]):
             potential_splits[col_idx] = []
@@ -76,6 +111,18 @@ class DTClassifier(object):
         return potential_splits
                 
     def split_condition(self, data, split_attr, split_val):
+        '''
+        Splits the input features DataFrame in two, based on an input attribute value. 
+    
+        Args:
+            data(pd.DataFrame): the input features
+            split_attr(int): the index of the target attribute column
+            split_val(int): the center-point value for the split
+            
+        Returns:
+            data_left(pd.DataFrame): the data points <= the split value
+            data_right(pd.DataFrame): the data points > the split value
+        '''
         split_attr_data = data.iloc[:, split_attr]
         data_left = data[split_attr_data <= split_val]
         data_right = data[split_attr_data > split_val]
@@ -83,6 +130,15 @@ class DTClassifier(object):
         return data_left, data_right
     
     def get_entropy(self, labels):
+        '''
+        Calculates the entropy for the current split. 
+    
+        Args:
+            labels(pd.Series): the current annotations for the split
+            
+        Returns:
+            entropy(float): the Entropy value
+        '''
         unique_labels = labels.unique()
         unique_values = []
         for i in range(len(unique_labels)):
@@ -94,6 +150,17 @@ class DTClassifier(object):
         return entropy
     
     def get_full_entropy(self, labels_left, labels_right):
+        '''
+        Calculates the combined entropy from the left and right child nodes of the tree
+        to get the total Information Gain for the current depth.
+    
+        Args:
+            labels_left(pd.Series): the annotations <= the split value
+            labels_right(pd.Series): the annotations > the split value
+            
+        Returns:
+            entropy(float): the Entropy value
+        '''
         n_left = len(labels_left)
         n_right = len(labels_right)
         n_total = n_left + n_right
@@ -105,6 +172,15 @@ class DTClassifier(object):
         return full_entropy
     
     def get_gini_coeff(self, labels):
+        '''
+        Calculates the Gini coefficient for the current data split.
+    
+        Args:
+            labels(pd.Series): the current annotations for the split
+            
+        Returns:
+            g(float): the Gini coefficient value
+        '''
         # Mean absolute difference
         mad = np.abs(np.subtract.outer(labels, labels)).mean()
         # Relative mean absolute difference
@@ -114,6 +190,17 @@ class DTClassifier(object):
         return g
     
     def get_full_gini(self, labels_left, labels_right):
+        '''
+        Calculates the combined Gini index from the left and right child nodes of the tree
+        to get the total Information Gain for the current depth.
+    
+        Args:
+            labels_left(pd.Series): the annotations <= the split value
+            labels_right(pd.Series): the annotations > the split value
+            
+        Returns:
+            full_gini(float): the combined Gini coefficient
+        '''
         n_left = len(labels_left)
         n_right = len(labels_right)
         n_total = n_left + n_right
@@ -126,6 +213,17 @@ class DTClassifier(object):
         return full_gini
     
     def get_best_split(self, attributes, labels):
+        '''
+        Estimates and returns the best tree split, based on the chosen criterion.
+    
+        Args:
+            attributes(pd.DataFrame): the input features of the current split
+            labels(pd.Series): the input annotations of the current split
+            criterion(str): ['entropy', 'gini'] - the measure to calculate the Information Gain
+        Returns:
+            best_split_attr(pd.DataFrame): the best found attribute to split on for the chosen criterion
+            best_split_val(pd.Series): the best found split value of the attribute
+        '''
         print('Finding best split..')
         best_measure = 10000
         all_splits = self.get_tree_splits(attributes)
@@ -150,6 +248,18 @@ class DTClassifier(object):
         return best_split_attr, best_split_val
     
     def make_decision_tree(self, attributes, labels, counter=0, split_label='root'):
+        '''
+        Implements the decision tree by recursively searching for the best split attribute and value.
+        After the tree is successfully built, it is traversed and saved to a dictionary for printing.
+    
+        Args:
+            attributes(pd.DataFrame): the input features of the dataset
+            labels(pd.Series): the input annotations of the dataset
+            counter(int): global counter for the recursion level
+            split_label(str): the name of the current parent node that is being split
+        Returns:
+            tree_predictions(list): the list of predicted labels
+        '''
 
         #print('Counter:', counter)
         # base case
@@ -189,10 +299,27 @@ class DTClassifier(object):
         return sub_tree
     
     def print_tree(self, decision_tree):
+        '''
+        Prints the tree with improved spacing to highlight the splits.
+        
+        Args:
+            decision_tree(dict): the learned decision tree in dictionary format
+        Returns:
+        
+        '''
         pp = pprint.PrettyPrinter()
         pp.pprint(decision_tree)
         
     def predict_sample(self, decision_tree, sample):
+        '''
+        Predicts the class for a single example by traversing the tree recursively to find the correct decision node.
+        
+        Args:
+            decision_tree(dict): the learned decision tree in dictionary format
+            sample(pd.Series): a series of attribute values for prediction
+        Returns:
+            prediction(str): a value representing the predicted class
+        '''
         decisions = list(decision_tree.keys())[0]
         feature_name, comparison_operator, value = decisions.split(" ")
 
@@ -211,6 +338,16 @@ class DTClassifier(object):
         return self.predict_sample(rec_tree, sample)
     
     def evaluate_tree(self, decision_tree, test_attr, test_labels):
+        '''
+        Computes the classification accuracy by counting the incorrect and correct samples in the prediction list.
+    
+        Args:
+            decision_tree(dict): the learned decision tree in dictionary format
+            test_attr(pd.DataFrame): the input test features for prediction
+            test_labels(pd.Series): the input test labels for prediction
+        Returns:
+            
+        '''
         predictions = []
         for i in range(len(test_attr)):
             prediction = self.predict_sample(decision_tree, test_attr.iloc[i])
@@ -225,6 +362,15 @@ class DTClassifier(object):
         print('Classification accuracy:', accuracy)
         
     def tree_get_predictions(self, decision_tree, test_attr):
+        '''
+        Returns a list of all the predicted samples from a DataFrame of features.
+    
+        Args:
+            decision_tree(dict): the learned decision tree in dictionary format
+            test_attr(pd.DataFrame): the input test features for prediction
+        Returns:
+            
+        '''
         predictions = []
         for i in range(len(test_attr)):
             prediction = self.predict_sample(decision_tree, test_attr.iloc[i])
@@ -232,6 +378,17 @@ class DTClassifier(object):
         return predictions
     
     def plot_roc(self, labels_test, labels_pred, class_names=[1, 2, 3]):
+        '''
+        Computes and plots the ROC curve for each class label along with the average curves.
+    
+        Args:
+            labels_test(pd.Series): the true labels in the test set
+            labels_pred(pd.Series): the predicted labels of the model
+            class_names(list): the list of possible annotation names
+        Returns:
+            roc_auc['micro'](float): the micro average AUC value
+            roc_auc['macro'](float): the macro average AUC value
+        '''
         # for multiclass cases
         plt.figure(figsize=(8,8))
         labels_test_bin = label_binarize(labels_test, classes=class_names)
@@ -293,6 +450,16 @@ class DTClassifier(object):
         return roc_auc['micro'], roc_auc['macro']
     
     def plot_cm(self, labels_test, labels_pred_test, class_names=[1, 2, 3]):
+        '''
+        Computes and plots the Confusion Matrix for each class label.
+    
+        Args:
+            labels_test(pd.Series): the true labels in the test set
+            labels_pred_test(pd.Series): the predicted labels of the model
+            class_names(list): the list of possible annotation names
+        Returns:
+        
+        '''
         cm = confusion_matrix(labels_test, labels_pred_test)
         print(cm)
         fig = plt.figure(figsize=(7,7))
@@ -307,6 +474,16 @@ class DTClassifier(object):
         plt.show()
         
     def cv_train_eval_tree(self, data, class_names=['1', '2', '3']):
+        '''
+        Evaluates the tree using K-fold Cross Validation by splitting the training set.
+        Evaluates each fold separately using all performance metrics.
+    
+        Args:
+            data(pd.DataFrame): the input features
+            class_names(list): the list of possible annotation names
+        Returns:
+        
+        '''
         kfold = StratifiedKFold(n_splits=self._cv_k, shuffle=True, random_state=42)
         # enumerate splits
         counter = 0
